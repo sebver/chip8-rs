@@ -7,6 +7,7 @@ struct Emulator {
     display: [[bool; WIDTH]; HEIGHT],
     index_register: usize,
     var_registers: [u8; 16],
+    stack: Vec<usize>,
 }
 
 impl Emulator {
@@ -17,6 +18,7 @@ impl Emulator {
             display: [[false; WIDTH]; HEIGHT],
             index_register: 0,
             var_registers: [0; 16],
+            stack: Vec::new(),
         }
     }
 
@@ -26,16 +28,6 @@ impl Emulator {
             self.memory[idx] = b;
         }
         self
-    }
-
-    fn run(&mut self) {
-        loop {
-            let instruction = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
-            self.pc += 2;
-            self.execute(instruction);
-            self.debug_display();
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
     }
 
     /// Returns true when display has changed, false otherwise.
@@ -58,12 +50,29 @@ impl Emulator {
         let x = nibbles.1 as usize;
         let y = nibbles.2 as usize;
         match nibbles {
-            (0, 0, 0xE, 0) => {
+            (0x0, 0x0, 0xE, 0x0) => {
                 self.display = [[false; WIDTH]; HEIGHT];
                 true
             }
+            (0x0, 0x0, 0xE, 0xE) => {
+                self.pc = self.stack.pop().unwrap();
+                false
+            }
             (0x1, _, _, _) => {
                 self.pc = nnn;
+                false
+            }
+            (0x2, _, _, _) => {
+                self.stack.push(self.pc);
+                self.pc = nnn;
+                false
+            }
+            (0x3, _, _, _) => {
+                self.pc += if self.var_registers[x] == nn { 2 } else { 0 };
+                false
+            }
+            (0x4, _, _, _) => {
+                self.pc += if self.var_registers[x] != nn { 2 } else { 0 };
                 false
             }
             (0x6, _, _, _) => {
@@ -74,12 +83,27 @@ impl Emulator {
                 self.var_registers[x] += nn;
                 false
             }
+            (0x8, _, _, 0x0) => {
+                self.var_registers[x] = self.var_registers[y];
+                false
+            }
+            (0x8, _, _, 0x7) => {
+                let (result, overflowing) =
+                    self.var_registers[y].overflowing_sub(self.var_registers[x]);
+                self.var_registers[x] = result;
+                self.var_registers[0xF] = if overflowing { 0 } else { 1 };
+                false
+            }
             (0xA, _, _, _) => {
                 self.index_register = nnn;
                 false
             }
+            (0xC, _, _, _) => {
+                self.var_registers[x] = rand::random::<u8>() & nn;
+                false
+            }
             (0xD, _, _, _) => self.draw(x, y, n as usize),
-            _ => todo!(),
+            _ => todo!("{:>4X?}", op),
         }
     }
 
@@ -120,15 +144,15 @@ impl Emulator {
 }
 
 fn main() {
-    let rom = std::fs::read("rom/IBMLogo.ch8").unwrap();
+    let rom = std::fs::read("rom/br8kout.ch8").unwrap();
     let mut emulator = Emulator::new();
 
-    emulator.load_rom(rom).run();
+    emulator.load_rom(rom);
 
     loop {
         if emulator.execute_current() {
             emulator.debug_display();
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }

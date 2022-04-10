@@ -4,7 +4,7 @@ const HEIGHT: usize = 32;
 struct Emulator {
     memory: [u8; 4096],
     pc: usize,
-    display: [u8; WIDTH * HEIGHT],
+    display: [[bool; WIDTH]; HEIGHT],
     index_register: usize,
     var_registers: [u8; 16],
 }
@@ -14,7 +14,7 @@ impl Emulator {
         Emulator {
             memory: [0; 4096],
             pc: 0x200,
-            display: [0; WIDTH * HEIGHT],
+            display: [[false; WIDTH]; HEIGHT],
             index_register: 0,
             var_registers: [0; 16],
         }
@@ -51,7 +51,7 @@ impl Emulator {
         let x = nibbles.1 as usize;
         let y = nibbles.2 as usize;
         match nibbles {
-            (0, 0, 0xE, 0) => self.display = [0; WIDTH * HEIGHT],
+            (0, 0, 0xE, 0) => self.display = [[false; WIDTH]; HEIGHT],
             (0x1, _, _, _) => self.pc = nnn,
             (0x6, _, _, _) => self.var_registers[x] = nn,
             (0x7, _, _, _) => self.var_registers[x] += nn,
@@ -68,11 +68,11 @@ impl Emulator {
             let sprite = self.memory[self.index_register + i];
             for (j, col) in (coord_x..coord_x + 8).enumerate() {
                 if col < WIDTH {
-                    let idx = row * WIDTH + col;
-                    let sprite_bit = 1 & (sprite >> (7 - j));
-                    if sprite_bit != self.display[idx] {
-                        self.display[idx] = 1 & !self.display[idx];
-                        if self.display[idx] == 0 {
+                    let pixel = &mut self.display[row][col];
+                    let sprite_pixel = 1 & (sprite >> (7 - j)) == 1;
+                    if sprite_pixel != *pixel {
+                        *pixel = !*pixel;
+                        if !*pixel {
                             self.var_registers[0xF] = 1;
                         }
                     }
@@ -85,8 +85,7 @@ impl Emulator {
         for r in 0..HEIGHT {
             print!("[{:0>2}]: ", r);
             for c in 0..WIDTH {
-                let on = 1 & self.display[r * WIDTH + c] != 0;
-                print!("{}", if on { '#' } else { ' ' });
+                print!("{}", if self.display[r][c] { '#' } else { ' ' });
             }
             print!("\n");
         }

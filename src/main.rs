@@ -1,5 +1,11 @@
+extern crate sdl2;
+
+use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window, Sdl};
+
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
+
+const BLOCK_SIZE: u32 = 10;
 
 struct Emulator {
     memory: [u8; 4096],
@@ -149,10 +155,57 @@ fn main() {
 
     emulator.load_rom(rom);
 
+    let sdl_context = sdl2::init().unwrap();
+    let mut canvas = create_canvas(
+        &sdl_context,
+        WIDTH as u32 * BLOCK_SIZE,
+        HEIGHT as u32 * BLOCK_SIZE,
+    )
+    .unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+
     loop {
-        if emulator.execute_current() {
-            emulator.debug_display();
+        for _ in event_pump.poll_iter() {
+            // Do something
         }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        if emulator.execute_current() {
+            // emulator.debug_display();
+            draw_canvas(&mut canvas, &emulator.display);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
+}
+
+fn create_canvas(sdl_context: &Sdl, width: u32, height: u32) -> Result<Canvas<Window>, String> {
+    let video_subsystem = sdl_context.video()?;
+
+    let window = video_subsystem
+        .window("CHIP-8 emulator!", width, height)
+        .position_centered()
+        .opengl()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    Ok(canvas)
+}
+
+fn draw_canvas(canvas: &mut Canvas<Window>, pixels: &[[bool; WIDTH]; HEIGHT]) {
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    canvas.set_draw_color(Color::RGB(255, 255, 255));
+    for (i, row) in pixels.iter().enumerate() {
+        for (j, col) in row.iter().enumerate() {
+            if *col {
+                let rect = Rect::new(
+                    (BLOCK_SIZE * j as u32) as i32,
+                    (BLOCK_SIZE * i as u32) as i32,
+                    BLOCK_SIZE,
+                    BLOCK_SIZE,
+                );
+                canvas.fill_rect(rect).unwrap();
+            }
+        }
+    }
+    canvas.present();
 }
